@@ -1,0 +1,155 @@
+# let's get started!
+
+# move the target file to ubuntu
+cd /mnt/c/Users/(username)/Desktop		
+cp -r (filename) /home/(ubuntu_username)
+
+# Manifest File
+qiime tools import --type 'SampleData[SequencesWithQuality]' 
+--input-path /home/matt/KO/manifest.tsv \
+--output-path /home/matt/KO/sequences.qza \
+--input-format SingleEndFastqManifestPhred33V2 \
+
+# Delete Barcode Primer
+qiime cutadapt trim-single \
+--i-demultiplexed-sequences /home/matt/KO/sequences.qza \
+--o-trimmed-sequences /home/matt/KO/trimmed.qza
+
+# Summarize and visualize the qza
+qiime demux summarize \
+--i-data /home/matt/KO/trimmed.qza \
+--o-visualization /home/matt/KO/demultiplexed-seqs.qzv
+
+# Quality controlling sequences and building feature table and feature data
+qiime dada2 denoise-single \
+--i-demultiplexed-seqs /home/matt/KO/trimmed.qza \
+--p-trim-left 0 \
+--p-trunc-len 0 \
+--p-n-threads 0 \
+--o-representative-sequences /home/matt/KO/rep-seqs.qza \
+--o-table /home/matt/KO/table.qza \
+--o-denoising-stats /home/matt/KO/test_stats.qza
+
+# Classify query sequences using Blast (This is for PICRUSt and greengene)
+qiime tools import \
+--type 'FeatureData[Sequence]' \
+--input-path /home/matt/KO/ezbiocloud_qiime_full.fasta \
+--output-path 99_otus_16S
+
+qiime tools import \
+--type 'FeatureData[Taxonomy]' \
+--input-path /home/matt/KO/ezbiocloud_id_taxonomy.txt \
+--input-format HeaderlessTSVTaxonomyFormat \
+--output-path majority_taxonomy_7_levels
+
+qiime feature-classifier classify-consensus-blast \
+--i-query /home/matt/KO/rep-seqs.qza \
+--i-reference-taxonomy majority_taxonomy_7_levels.qza \
+--i-reference-reads 99_otus_16S.qza \
+--o-classification /home/matt/KO/taxonomy.qza \
+--o-search-results /home/matt/KO/results.qza \
+--p-perc-identity 0.90 \
+--p-maxaccepts 1
+
+# Biom, Taxonomy.tsv
+qiime taxa collapse \
+  --i-table /home/matt/KO/table.qza \
+  --i-taxonomy /home/matt/KO/taxonomy.qza \
+  --p-level 7 \
+  --o-collapsed-table /home/matt/KO/phyla-table.qza 
+
+qiime feature-table relative-frequency \
+--i-table /home/matt/KO/phyla-table.qza \
+--o-relative-frequency-table /home/matt/KO/rel-phyla-table.qza
+
+qiime tools export \
+--input-path /home/matt/KO/rel-phyla-table.qza \
+--output-path /home/matt/KO/
+
+biom convert -i /home/matt/KO/feature-table.biom -o /home/matt/KO/rel-phyla7-table.tsv --to-tsv
+
+# Generate a phylogenetic tree
+qiime alignment mafft \
+--i-sequences /home/matt/KO/rep-seqs.qza \
+--o-alignment /home/matt/KO/aligned-rep-seqs.qza
+
+qiime alignment mask \
+--i-alignment /home/matt/KO/aligned-rep-seqs.qza \
+--o-masked-alignment /home/matt/KO/masked-aligned-rep-seqs.qza
+
+qiime phylogeny fasttree \
+--i-alignment /home/matt/KO/masked-aligned-rep-seqs.qza \
+--o-tree /home/matt/KO/unrooted-tree.qza
+
+qiime phylogeny midpoint-root \
+--i-tree /home/matt/KO/unrooted-tree.qza \
+--o-rooted-tree /home/matt/KO/rooted-tree.qza
+
+# Analyzing alpha and beta diversities
+qiime diversity alpha-rarefaction \
+--i-table /home/matt/KO/table.qza \
+--i-phylogeny /home/matt/KO/rooted-tree.qza \
+--p-max-depth 5 \
+--p-min-depth 1 \
+--p-steps 4 \
+--p-metrics chao1 \
+--p-metrics shannon \
+--p-metrics observed_features \
+--p-metrics simpson \
+--m-metadata-file /home/matt/KO/metadata.tsv \
+--o-visualization /home/matt/KO/alpha-rarefaction.qzv
+
+qiime taxa barplot \
+--i-table /home/matt/KO/table.qza \
+--i-taxonomy /home/matt/KO/taxonomy.qza \
+--m-metadata-file /home/matt/KO/metadata.tsv \
+--o-visualization  /home/matt/KO/taxa-bar-plots.qzv
+
+# Beta diversity core analyses
+qiime diversity core-metrics-phylogenetic \
+--i-phylogeny /home/matt/KO/rooted-tree.qza \
+--i-table /home/matt/KO/table.qza \
+--p-with-replacement False \
+--p-n-jobs-or-threads 1 \
+--p-sampling-depth 1 \
+--m-metadata-file /home/matt/KO/metadata.tsv \
+--o-rarefied-table /home/matt/KO/core-metrics/rarefied_table.qza \
+--o-faith-pd-vector /home/matt/KO/core-metrics/faith_pd_vector.qza \
+--o-observed-features-vector /home/matt/KO/core-metrics/observed_features_vector.qza \
+--o-shannon-vector /home/matt/KO/core-metrics/shannon_vector.qza \
+--o-evenness-vector /home/matt/KO/core-metrics/evenness_vector.qza \
+--o-unweighted-unifrac-distance-matrix /home/matt/KO/core-metrics/unweighted_unifrac_distance_matrix.qza \
+--o-weighted-unifrac-distance-matrix /home/matt/KO/core-metrics/weighted_unifrac_distance_matrix.qza \
+--o-jaccard-distance-matrix /home/matt/KO/core-metrics/jaccard_distance_matrix.qza \
+--o-bray-curtis-distance-matrix /home/matt/KO/core-metrics/bray_curtis_distance_matrix.qza \
+--o-unweighted-unifrac-pcoa-results /home/matt/KO/core-metrics/unweighted_unifrac_pcoa_results.qza \
+--o-weighted-unifrac-pcoa-results /home/matt/KO/core-metrics/weighted_unifrac_pcoa_results.qza \
+--o-jaccard-pcoa-results /home/matt/KO/core-metrics/jaccard_pcoa_results.qza \
+--o-bray-curtis-pcoa-results /home/matt/KO/core-metrics/bray_curtis_pcoa_results.qza \
+--o-unweighted-unifrac-emperor /home/matt/KO/core-metrics/unweighted_unifrac_emperor.qzv \
+--o-weighted-unifrac-emperor /home/matt/KO/core-metrics/weighted_unifrac_emperor.qzv \
+--o-jaccard-emperor /home/matt/KO/core-metrics/jaccard_emperor.qzv \
+--o-bray-curtis-emperor /home/matt/KO/core-metrics/bray_curtis_emperor.qzv \
+
+qiime diversity alpha-correlation \
+--i-alpha-diversity /home/matt/KO/core-metrics/faith_pd_vector.qza \
+--m-metadata-file /home/matt/KO/metadata.tsv \
+--p-method spearman \
+--p-intersect-ids False \
+--o-visualization /home/matt/KO/core-metrics/faith-pd-correlation.qzv
+
+qiime emperor plot \
+--i-pcoa /home/matt/KO/core-metrics/unweighted_unifrac_pcoa_results.qza \
+--m-metadata-file /home/matt/KO/metadata.tsv \
+--p-custom-axes \
+--p-ignore-missing-samples True \
+--p-ignore-pcoa-features False \
+--o-visualization /home/matt/KO/core-metrics/unweighted-unifrac-emperor-Depths.qzv
+
+qiime emperor plot \
+--i-pcoa /home/matt/KO/core-metrics/bray_curtis_pcoa_results.qza \
+--m-metadata-file /home/matt/KO/metadata.tsv \
+--p-custom-axes \
+--p-ignore-missing-samples True \
+--p-ignore-pcoa-features False \
+--o-visualization /home/matt/KO/core-metrics/bray-curtisc-emperor-Depths.qzv
